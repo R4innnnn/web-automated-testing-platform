@@ -1,0 +1,12 @@
+code/backend/.venv/
+code/backend/data/
+code/frontend/node_modules/
+code/frontend/dist/
+__pycache__/
+.pytest_cache/
+*.pyc
+.coverage
+coverage.xml
+*.log
+prompt/资料/*.pdf
+
