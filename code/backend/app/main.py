@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .models import JobConfig, Module
@@ -87,7 +87,9 @@ def report(job_id: str):
     path = run_path(job_id) / "index.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="报告尚未生成")
-    return FileResponse(path, media_type="text/html")
+    return RedirectResponse(
+        url=f"/api/jobs/{job_id}/artifact/index.html", status_code=307
+    )
 
 
 @app.get("/api/jobs/{job_id}/artifact/{file_path:path}")

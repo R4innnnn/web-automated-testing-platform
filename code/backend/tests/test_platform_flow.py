@@ -88,6 +88,13 @@ def test_local_blackbox_and_optional_modules(tmp_path):
             assert basic_job["config"]["modules"] == []
             assert any(f["module"] == "runtime" for f in basic_job["result"]["findings"])
             assert (storage.run_path(basic_job["id"]) / "index.html").is_file()
+            report_page = client.get(f"/api/jobs/{basic_job['id']}/report")
+            assert report_page.status_code == 200
+            assert report_page.url.path.endswith("/artifact/index.html")
+            assert "finding-001.html" in report_page.text
+            assert client.get(
+                f"/api/jobs/{basic_job['id']}/artifact/finding-001.html"
+            ).status_code == 200
 
             security = client.post("/api/jobs", json={
                 "mode": "url", "url": url + "/",
