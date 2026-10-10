@@ -402,7 +402,7 @@ onUnmounted(() => clearInterval(timer))
 
         <template v-if="selected?.status === 'completed'">
           <div class="result-block">
-            <div class="result-title"><h3>发现的 Bug</h3><span>{{ visibleFindings.length }} 项</span></div>
+            <div class="result-title"><h3>发现与待复核线索</h3><span>{{ visibleFindings.length }} 项</span></div>
             <div v-if="!visibleFindings.length" class="quiet">此次未得到证据充分的错误或漏洞。</div>
             <el-collapse v-else>
               <el-collapse-item v-for="finding in visibleFindings" :key="finding.id"
@@ -411,6 +411,7 @@ onUnmounted(() => clearInterval(timer))
                   <div class="finding-heading">
                     <span class="severity" :class="finding.severity">{{ severityText[finding.severity] || finding.severity }}</span>
                     <strong>{{ finding.title }}</strong>
+                    <small v-if="finding.confidence === 'suspected'">待复核</small>
                   </div>
                 </template>
                 <div class="finding-detail">

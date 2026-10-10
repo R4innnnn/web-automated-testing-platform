@@ -4,6 +4,7 @@ import hashlib
 import re
 import threading
 import time
+from urllib.parse import urlsplit
 
 from .crawler import Budget, crawl
 from .models import JobConfig, redact_url
@@ -26,9 +27,13 @@ def _deduplicate(findings: list[dict]) -> list[dict]:
     seen: set[str] = set()
     for finding in findings:
         evidence = finding.get("evidence", {})
+        parsed_url = urlsplit(finding.get("url", ""))
+        location = (
+            f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path or '/'}"
+        )
         key_text = "|".join([
             finding.get("module", ""), finding.get("title", ""),
-            finding.get("url", ""), str(evidence.get("parameter", "")),
+            location, str(evidence.get("parameter", "")),
             str(evidence.get("cookie_name", "")),
         ])
         key = hashlib.sha256(key_text.encode()).hexdigest()[:12]

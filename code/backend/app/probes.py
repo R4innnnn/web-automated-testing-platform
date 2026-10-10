@@ -157,36 +157,49 @@ class ProbeEngine:
             for name, value in list(endpoint["fields"].items())[:5]:
                 if SKIP_FIELD.search(name) or endpoint["field_types"].get(name) in {"file", "password"}:
                     continue
-                base = self.endpoint_request(endpoint)
+                sample = (
+                    "1" if not str(value).strip()
+                    and re.search(r"(?:^id$|_id$)", name, re.I)
+                    else str(value)
+                )
+                base = self.endpoint_request(endpoint, {name: sample})
                 if base is None:
                     return
-                quoted = self.endpoint_request(endpoint, {name: value + "'"})
+                quoted = self.endpoint_request(endpoint, {name: sample + "'"})
                 if quoted is None:
                     return
                 base_error = bool(SQL_ERROR.search(base.text))
                 quote_error = bool(SQL_ERROR.search(quoted.text))
+                error_candidate = False
                 if quote_error and not base_error:
+                    repeated = self.endpoint_request(endpoint, {name: sample + "'"})
+                    error_candidate = bool(
+                        repeated and SQL_ERROR.search(repeated.text)
+                    )
+                if sample.strip().isdigit():
+                    truth = self.endpoint_request(endpoint, {name: sample + " AND 1=1"})
+                    false = self.endpoint_request(endpoint, {name: sample + " AND 1=2"})
+                    if truth is None or false is None:
+                        return
+                    a = _similarity(base.text, truth.text)
+                    b = _similarity(base.text, false.text)
+                    if a >= 0.88 and b <= 0.68 and truth.status == base.status:
+                        self.findings.append(make_finding(
+                            "sqli", "SQL 注入：布尔条件改变查询结果", "high", endpoint["url"],
+                            {"parameter": name, "method": endpoint["method"],
+                             "baseline_true_similarity": round(a, 2),
+                             "baseline_false_similarity": round(b, 2)},
+                        ))
+                        continue
+                if error_candidate:
                     self.findings.append(make_finding(
-                        "sqli", "SQL 注入：输入触发数据库错误", "high", endpoint["url"],
+                        "sqli", "SQL 注入线索：输入重复触发数据库错误",
+                        "medium", endpoint["url"],
                         {"parameter": name, "method": endpoint["method"],
-                         "baseline_status": base.status, "probe_status": quoted.status,
-                         "signal": "探测请求出现数据库错误特征，基线请求没有"},
-                    ))
-                    continue
-                if not str(value).strip().isdigit():
-                    continue
-                truth = self.endpoint_request(endpoint, {name: value + " AND 1=1"})
-                false = self.endpoint_request(endpoint, {name: value + " AND 1=2"})
-                if truth is None or false is None:
-                    return
-                a = _similarity(base.text, truth.text)
-                b = _similarity(base.text, false.text)
-                if a >= 0.88 and b <= 0.68 and truth.status == base.status:
-                    self.findings.append(make_finding(
-                        "sqli", "SQL 注入：布尔条件改变查询结果", "high", endpoint["url"],
-                        {"parameter": name, "method": endpoint["method"],
-                         "baseline_true_similarity": round(a, 2),
-                         "baseline_false_similarity": round(b, 2)},
+                         "baseline_status": base.status,
+                         "probe_status": quoted.status,
+                         "signal": "两次探测出现数据库错误，基线请求没有；需结合查询差异或源码复核"},
+                        confidence="suspected",
                     ))
 
     def check_xss(self) -> None:

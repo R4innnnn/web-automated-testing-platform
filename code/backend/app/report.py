@@ -47,7 +47,7 @@ def write_reports(run_dir: Path, result: dict) -> None:
         "<p>已探索页面：" + str(len(result.get("pages", []))) +
         "；请求计数：" + str(result.get("request_count", 0)) +
         "；发现：" + str(sum(not f.get("suppressed") for f in findings)) + "</p>"
-        "<h2>发现的 Bug</h2>"
+        "<h2>发现与待复核线索</h2>"
         "<table><thead><tr><th>标题</th><th>模块</th><th>级别</th>"
         "<th>证据</th><th>位置</th></tr></thead><tbody>" +
         "".join(rows) + "</tbody></table>"

@@ -19,6 +19,10 @@ from .scope import Scope
 SKIP_LINK = re.compile(
     r"(?:logout|signout|delete|remove|destroy|reset|drop|truncate)", re.I
 )
+FATAL_PAGE_ERROR = re.compile(
+    r"(?:Fatal error\s*:|Uncaught [A-Za-z_]+Exception|"
+    r"Traceback \(most recent call last\))", re.I
+)
 
 
 @dataclass
@@ -137,6 +141,10 @@ def _login(page, config: JobConfig, scope: Scope, events: list[dict]) -> str:
 def crawl(config: JobConfig, run_dir: Path, scope: Scope, budget: Budget,
           progress, target_process=None) -> dict:
     started = time.monotonic()
+    explore_limit = (
+        max(1, config.max_requests // 2)
+        if config.modules else config.max_requests
+    )
     frontier = [normalise_url(config.target_url)]
     queued = set(frontier)
     seen: set[str] = set()
@@ -160,7 +168,7 @@ def crawl(config: JobConfig, run_dir: Path, scope: Scope, budget: Budget,
             request = route.request
             if request.is_navigation_request() and not scope.allows(request.url):
                 route.abort()
-            elif budget.take():
+            elif budget.count < explore_limit and budget.take():
                 route.continue_()
             else:
                 route.abort()
@@ -172,8 +180,12 @@ def crawl(config: JobConfig, run_dir: Path, scope: Scope, budget: Budget,
             if time.monotonic() - started > config.timeout_seconds:
                 events.append({"action": "stop", "reason": "时间预算已耗尽"})
                 break
-            if budget.count >= budget.maximum:
-                events.append({"action": "stop", "reason": "请求预算已耗尽"})
+            if budget.count >= explore_limit:
+                events.append({
+                    "action": "stop",
+                    "reason": "探索阶段配额已用完，剩余请求留给安全检测"
+                    if config.modules else "请求预算已耗尽",
+                })
                 break
             index = -1 if config.algorithm == "dfs" else (
                 randomizer.randrange(len(frontier))
@@ -222,6 +234,16 @@ def crawl(config: JobConfig, run_dir: Path, scope: Scope, budget: Budget,
                         "module": "runtime", "title": "服务返回 5xx",
                         "severity": "medium", "confidence": "observed",
                         "url": final_url, "evidence": {"status": status},
+                        "screenshot": item["screenshot"],
+                    })
+                elif FATAL_PAGE_ERROR.search(
+                    BeautifulSoup(html, "html.parser").get_text(" ", strip=True)[:2000]
+                ):
+                    findings.append({
+                        "module": "runtime", "title": "页面显示服务端致命错误",
+                        "severity": "medium", "confidence": "observed",
+                        "url": final_url,
+                        "evidence": {"status": status, "signal": "服务端致命错误特征"},
                         "screenshot": item["screenshot"],
                     })
                 if status == 404 and len(pages) > 1:
